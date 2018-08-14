@@ -6,6 +6,9 @@ name = "pypi"
 [packages]
 cmake = "*"
 dlib = "*"
+numpy = "*"
+pillow = "*"
+scipy = "*"
 
 [dev-packages]
 
