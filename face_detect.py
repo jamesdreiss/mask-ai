@@ -7,9 +7,10 @@ import dlib
 
 path = os.path.join(os.path.dirname(os.path.realpath(__file__)))
 
+face_detector = dlib.get_frontal_face_detector()
+
 
 def face_detect(img):
-    face_detector = dlib.get_frontal_face_detector()
     faces = face_detector(img, 1)
     return faces
 
@@ -28,7 +29,7 @@ def main():
     img_array = np.asarray(img)
     faces = face_detect(img_array)
     for idx, f in enumerate(faces):
-        region = img.crop((f.top(), f.right(), f.bottom(), f.left()))
+        region = img.crop((f.left(), f.top(), f.right(), f.bottom()))
         region.save(os.path.join(path, str(idx) + '.jpg'), 'JPEG')
 
 
