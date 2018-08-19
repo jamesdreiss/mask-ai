@@ -7,8 +7,8 @@ name = "pypi"
 cmake = "*"
 dlib = "*"
 numpy = "*"
-pillow = "*"
 scipy = "*"
+opencv-python = "*"
 
 [dev-packages]
 
