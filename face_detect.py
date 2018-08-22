@@ -12,12 +12,6 @@ face_detector = dlib.get_frontal_face_detector()
 landmarks_model = os.path.join(path, 'models', 'shape_predictor_68_face_landmarks.dat')
 landmarks_predictor = dlib.shape_predictor(landmarks_model)
 
-# reference points for 68 point model: https://cdn-images-1.medium.com/max/1600/1*AbEg31EgkbXSQehuNJBlWg.png
-# triangulation example: https://inst.eecs.berkeley.edu/~cs194-26/fa17/upload/files/proj4/cs194-26-abc/imgs/obama.png
-
-# TODO: complete polyline segments
-face_polyline_segments = [(27, 21, 19, 0, 1, 3, 5, 8, 11, 13, 15, 16, 26, 24, 22, 21, 38, 36, 0)]
-
 
 def draw_polylines(face_img, polylines):
     """
@@ -28,7 +22,7 @@ def draw_polylines(face_img, polylines):
     :return: face_img_lined: bounding box of face with all polylines
     """
 
-    face_img_lined = cv2.polylines(face_img, polylines, False, (0, 255, 255))
+    face_img_lined = cv2.polylines(face_img, polylines, False, (0, 255, 255), 1, cv2.LINE_AA)
 
     return face_img_lined
 
@@ -41,6 +35,22 @@ def define_polylines(landmarks):
     :return: polylines: list of line segments containing coordinates used to draw line segments of
     the full face polyline
     """
+
+    # reference points for 68 point model: https://cdn-images-1.medium.com/max/1600/1*AbEg31EgkbXSQehuNJBlWg.png
+    face_polyline_segments = [
+        (27, 22, 21, 20, 19, 18, 17, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 26, 25, 24, 23, 22),
+        (0, 36, 17, 37, 18, 38, 20), (38, 19),  # around eye
+        (21, 38, 37, 36, 41, 40, 39, 38),  # eye
+        (39, 27, 31, 40, 1, 31, 3, 48, 5, 58, 59, 48, 31, 39),  # cheek
+        (21, 27, 28, 29, 30, 33, 32, 31, 51, 50, 49, 48), (31, 30, 35),  # keystone to upper lip
+        (60, 61, 62, 63, 64, 65, 66, 67, 60),  # inner lip
+        (8, 58, 57, 56, 8),  # chin
+        (56, 55, 54, 53, 52, 51),  # lip
+        (51, 33, 34, 35, 51), (35, 54),  # under nose
+        (56, 11, 54, 13, 35, 15, 47, 35, 42, 27, 35),  # cheek
+        (42, 47, 46, 45, 44, 43, 42),  # eye
+        (16, 45, 26, 44, 25, 43, 24), (22, 43, 23)
+    ]
 
     polylines = []
     coors = [(p.x, p.y) for p in landmarks.parts()]
@@ -70,7 +80,7 @@ def get_landmarks(img, face_rect):
 
 def edit_boundaries(boundaries, img_shape):
     """
-    Edit face boundary box to fit within the source image pixel locations and expand top and bottom percentage wise
+    Expand boundaries percentage wise and make sure they fit within the source image pixel locations
 
     :param boundaries: tuple of face boundary box locations (left, top, right, bottom)
     :param img_shape: tuple of shape of source image (row_count, col_count, num_channels)
@@ -78,18 +88,22 @@ def edit_boundaries(boundaries, img_shape):
     boundaries of the source image
     """
 
-    trimmed = [max(boundaries[0], 0), max(boundaries[1], 0), min(boundaries[2], img_shape[1]),
-               min(boundaries[3], img_shape[0])]
+    edited = list(boundaries)
 
-    length = boundaries[3] - boundaries[1]
-    trimmed[1] = trimmed[1] - round(.25 * length)
-    trimmed[3] = trimmed[3] + round(.10 * length)
-    edited = tuple(trimmed)
+    length = edited[3] - edited[1]
+    width = edited[2] - edited[0]
+    edited[0] = boundaries[0] - round(.50 * width)
+    edited[1] = boundaries[1] - round(.50 * length)
+    edited[2] = boundaries[2] + round(.50 * width)
+    edited[3] = boundaries[3] + round(.50 * length)
+
+    edited = [max(edited[0], 0), max(edited[1], 0), min(edited[2], img_shape[1]), min(edited[3], img_shape[0])]
+    edited = tuple(edited)
 
     return edited
 
 
-def rect_to_tuples(face):
+def rect_to_tuple(face):
     """
     Convert dlib rectangle object to a tuple of order (left, top, right, bottom)
 
@@ -139,10 +153,10 @@ def main():
             landmarks = get_landmarks(img, face_rect)
             polylines = define_polylines(landmarks)
             img_lined = draw_polylines(img, polylines)
-            boundaries = rect_to_tuples(face_rect)
+            boundaries = rect_to_tuple(face_rect)
             edited = edit_boundaries(boundaries, img.shape)
             face_img = img_lined[edited[1]:edited[3], edited[0]:edited[2]]
-            cv2.imwrite(os.path.join(path, str(idx) + '.jpg'), face_img)
+            cv2.imwrite(os.path.join(path, str(idx) + '_' + args.img), face_img)
 
 
 if __name__ == '__main__':
