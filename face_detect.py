@@ -143,20 +143,22 @@ def load_img(img_file):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('-i', '--img', required=True)
+    parser.add_argument('-d', '--dir', required=True)
     args = parser.parse_args()
 
-    img = load_img(args.img)
-    faces_rect = faces_detect(img)
-    if faces_rect:
-        for idx, face_rect in enumerate(faces_rect):
-            landmarks = get_landmarks(img, face_rect)
-            polylines = define_polylines(landmarks)
-            img_lined = draw_polylines(img, polylines)
-            boundaries = rect_to_tuple(face_rect)
-            edited = edit_boundaries(boundaries, img.shape)
-            face_img = img_lined[edited[1]:edited[3], edited[0]:edited[2]]
-            cv2.imwrite(os.path.join(path, str(idx) + '_' + args.img), face_img)
+    for filename in os.listdir(os.path.join(path, args.dir)):
+        if filename.endswith('jpg'):
+            img = load_img(os.path.join(path, args.dir, filename))
+            faces_rect = faces_detect(img)
+            if faces_rect:
+                for idx, face_rect in enumerate(faces_rect):
+                    landmarks = get_landmarks(img, face_rect)
+                    polylines = define_polylines(landmarks)
+                    img_lined = draw_polylines(img, polylines)
+                    boundaries = rect_to_tuple(face_rect)
+                    edited = edit_boundaries(boundaries, img.shape)
+                    face_img = img_lined[edited[1]:edited[3], edited[0]:edited[2]]
+                    cv2.imwrite(os.path.join(path, args.dir, str(idx) + '_' + filename), face_img)
 
 
 if __name__ == '__main__':
