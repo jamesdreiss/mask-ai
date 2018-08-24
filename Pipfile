@@ -6,6 +6,9 @@ name = "pypi"
 [packages]
 cmake = "*"
 dlib = "*"
+numpy = "*"
+scipy = "*"
+opencv-python = "*"
 
 [dev-packages]
 
