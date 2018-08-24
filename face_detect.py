@@ -158,7 +158,8 @@ def main():
                     boundaries = rect_to_tuple(face_rect)
                     edited = edit_boundaries(boundaries, img.shape)
                     face_img = img_lined[edited[1]:edited[3], edited[0]:edited[2]]
-                    cv2.imwrite(os.path.join(path, args.dir, str(idx) + '_' + filename), face_img)
+                    cv2.imwrite(os.path.join(path, args.dir, 'faces', filename[:-4] + '_' + str(idx) + '.jpg'),
+                                face_img)
 
 
 if __name__ == '__main__':
