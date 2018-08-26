@@ -3,6 +3,9 @@ import argparse
 import numpy as np
 import cv2
 import dlib
+import logging
+import sys
+import copy
 
 
 path = os.path.join(os.path.dirname(os.path.realpath(__file__)))
@@ -12,17 +15,40 @@ face_detector = dlib.get_frontal_face_detector()
 landmarks_model = os.path.join(path, 'models', 'shape_predictor_68_face_landmarks.dat')
 landmarks_predictor = dlib.shape_predictor(landmarks_model)
 
+logging.basicConfig(stream=sys.stdout, level=logging.DEBUG)
 
-def draw_polylines(face_img, polylines):
+
+def draw_landmarks(face_img, landmarks, colors_bgr=(0, 255, 255), thickness=1):
+    """
+    Draw landmarks points onto face bounding box image
+
+    :param face_img: cropped bounding box of face
+    :param landmarks: a full_object_detection object containing 68 face landmarks
+    :param colors_bgr: blue, green, red color values
+    :param thickness: line thickness
+    :return: face_img_landmarked: bounding box of face with drawn landmark points
+    """
+
+    coors = [(p.x, p.y) for p in landmarks.parts()]
+
+    for coor in coors:
+        cv2.circle(face_img, coor, 1, colors_bgr, thickness)
+
+    return face_img
+
+
+def draw_polylines(face_img, polylines, colors_bgr=(0, 255, 255), thickness=1):
     """
     Draw polyline segments onto face bounding box image
 
     :param face_img: cropped bounding box of face
     :param polylines: polyline segments for
+    :param colors_bgr: blue, green, red color values
+    :param thickness: line thickness
     :return: face_img_lined: bounding box of face with all polylines
     """
 
-    face_img_lined = cv2.polylines(face_img, polylines, False, (0, 255, 255), 1, cv2.LINE_AA)
+    face_img_lined = cv2.polylines(face_img, polylines, False, colors_bgr, thickness, cv2.LINE_AA)
 
     return face_img_lined
 
@@ -93,7 +119,7 @@ def edit_boundaries(boundaries, img_shape):
     length = edited[3] - edited[1]
     width = edited[2] - edited[0]
     edited[0] = boundaries[0] - round(.50 * width)
-    edited[1] = boundaries[1] - round(.50 * length)
+    edited[1] = boundaries[1] - round(.75 * length)
     edited[2] = boundaries[2] + round(.50 * width)
     edited[3] = boundaries[3] + round(.50 * length)
 
@@ -147,19 +173,27 @@ def main():
     args = parser.parse_args()
 
     for filename in os.listdir(os.path.join(path, args.dir)):
-        if filename.endswith('jpg'):
+        if filename.endswith(('jpg', 'JPG')):
+            logging.info('processing {}'.format(filename))
             img = load_img(os.path.join(path, args.dir, filename))
             faces_rect = faces_detect(img)
             if faces_rect:
                 for idx, face_rect in enumerate(faces_rect):
-                    landmarks = get_landmarks(img, face_rect)
-                    polylines = define_polylines(landmarks)
-                    img_lined = draw_polylines(img, polylines)
                     boundaries = rect_to_tuple(face_rect)
-                    edited = edit_boundaries(boundaries, img.shape)
-                    face_img = img_lined[edited[1]:edited[3], edited[0]:edited[2]]
-                    cv2.imwrite(os.path.join(path, args.dir, 'faces', filename[:-4] + '_' + str(idx) + '.jpg'),
-                                face_img)
+                    bound_edit = edit_boundaries(boundaries, img.shape)
+                    face_img = img[bound_edit[1]:bound_edit[3], bound_edit[0]:bound_edit[2]]
+
+                    face_rect_edit = faces_detect(face_img)  # rerunning to obtain consistent polyline thickness
+                    landmarks = get_landmarks(face_img, face_rect_edit[0])
+                    polylines = define_polylines(landmarks)
+
+                    img_lined = draw_polylines(copy.copy(face_img), polylines, colors_bgr=(255, 0, 0), thickness=3)
+                    img_dotted = draw_landmarks(copy.copy(face_img), landmarks, colors_bgr=(255, 0, 0), thickness=15)
+
+                    cv2.imwrite(os.path.join(
+                        path, args.dir, 'faces', filename[:-4] + '_' + str(idx) + '.jpg'), img_lined)
+                    cv2.imwrite(os.path.join(
+                        path, args.dir, 'faces', filename[:-4] + '_' + 'dots' + '_' + str(idx) + '.jpg'), img_dotted)
 
 
 if __name__ == '__main__':
