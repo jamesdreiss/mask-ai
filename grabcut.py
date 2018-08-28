@@ -152,7 +152,7 @@ if __name__ == '__main__':
         elif k == ord('3'):  # PR_FG drawing
             value = DRAW_PR_FG
         elif k == ord('s'):  # save image
-            cv.imwrite(os.path.join(path, 'pics', 'faces'), output)
+            cv.imwrite(os.path.join(filename[:-4] + '_' + 'cut.jpg'), output)
             print(" Result saved as image \n")
         elif k == ord('r'):  # reset everything
             print("resetting \n")
