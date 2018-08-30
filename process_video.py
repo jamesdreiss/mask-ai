@@ -14,17 +14,15 @@ def process_video(vid):
     fps = 30
     vidsize = (int(vid.get(cv2.CAP_PROP_FRAME_WIDTH)), int(vid.get(cv2.CAP_PROP_FRAME_HEIGHT)))
     fourcc = cv2.VideoWriter_fourcc('m', 'p', '4', 'v')
-    writer = cv2.VideoWriter()
-    out = writer.open('/Users/jamesdreiss/Downloads/FacialRecognition/test.mp4', fourcc, fps, vidsize)
+    out = cv2.VideoWriter('/Users/jamesdreiss/Downloads/FacialRecognition/test.mp4', fourcc, fps, vidsize)
 
     while vid.isOpened():
         ret, frame = vid.read()
         if ret is True:
-            frame = cv2.flip(frame, 0)
+            frame = cv2.flip(frame, 1)
 
             out.write(frame)
 
-            cv2.imshow('frame', frame)
             if cv2.waitKey(1) & 0xFF == ord('q'):
                 break
         else:
