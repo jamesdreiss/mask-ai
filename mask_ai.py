@@ -44,11 +44,6 @@ face_polyline_segments = {
         ]
 }
 
-colors_bgr = ((255, 0, 255), (0, 255, 255), (255, 0, 0))
-
-line_thickness = 3
-dot_thickness = 15
-
 
 def draw_landmarks(face_img, landmarks, colors=(0, 255, 255), thickness=1):
     """
@@ -184,7 +179,45 @@ def load_img(img_file):
     return img
 
 
+def apply_mask(img, polyline, colors, line_thickness, detect_faces=True):
+    """
+    Return image array with polyline ai mask
+
+    :param img: image as a multidimensional numpy array
+    :param polyline: polyline type from face_polyline_segments
+    :param colors: blue, green, red color values
+    :param line_thickness: line thickness of polylines
+    :param detect_faces: boolean for whether to detect faces in image
+    :return: an image array with mask
+    """
+
+    mask = None
+    faces_rect = faces_detect(img)
+    if faces_rect:
+        for face_rect in faces_rect:
+            boundaries = rect_to_tuple(face_rect)
+            if detect_faces:
+                bound_edit = edit_boundaries(boundaries, img.shape)
+                face_img = img[bound_edit[1]:bound_edit[3], bound_edit[0]:bound_edit[2]]
+                face_rect_edit = faces_detect(face_img)
+                landmarks = get_landmarks(face_img, face_rect_edit[0])
+                polylines = define_polylines(landmarks, face_polyline_segments[polyline])
+                mask = draw_polylines(face_img, polylines, colors=colors, thickness=line_thickness)
+            else:
+                landmarks = get_landmarks(img, face_rect)
+                polylines = define_polylines(landmarks, face_polyline_segments[polyline])
+                mask = draw_polylines(img, polylines, colors=colors, thickness=line_thickness)
+
+    return mask
+
+
 def main():
+
+    colors_bgr = ((255, 0, 255), (0, 255, 255), (255, 0, 0))
+
+    line_thickness = 3
+    dot_thickness = 15
+
     parser = argparse.ArgumentParser()
     parser.add_argument('-d', '--dir', required=True)
     args = parser.parse_args()
