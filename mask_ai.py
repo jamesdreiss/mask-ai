@@ -4,6 +4,7 @@ import numpy as np
 import cv2
 import dlib
 import logging
+import random
 import sys
 import copy
 
@@ -45,57 +46,57 @@ face_polyline_segments = {
 }
 
 
-def draw_landmarks(face_img, landmarks, colors=(0, 255, 255), thickness=1):
+def draw_landmarks(face_img, landmark_coors, colors=[(0, 255, 255)], thickness=1):
     """
-    Draw landmarks points onto face bounding box image
+    Draw landmarks points onto face bounding box image, with support for multi-colored dots
 
     :param face_img: cropped bounding box of face
-    :param landmarks: a full_object_detection object containing 68 face landmarks
-    :param colors: blue, green, red color values
+    :param landmark_coors: list of tuples of (x, y) coordinates for the 68 face landmarks
+    :param colors: list of blue, green, red color values
     :param thickness: line thickness
     :return: face_img_landmarked: bounding box of face with drawn landmark points
     """
 
-    coors = [(p.x, p.y) for p in landmarks.parts()]
+    colors_rep = colors * (len(landmark_coors) // len(colors))
+    colors_rep.extend(colors[:len(landmark_coors) % len(colors)])
 
-    for coor in coors:
-        cv2.circle(face_img, coor, 1, colors, thickness)
+    for idx, coor in enumerate(landmark_coors):
+        cv2.circle(face_img, coor, 1, colors_rep[idx], thickness, cv2.LINE_AA)
 
     return face_img
 
 
-def draw_polylines(face_img, polylines, colors=(0, 255, 255), thickness=1):
+def draw_polylines(face_img, polylines, colors=[(0, 255, 255)], thickness=1):
     """
     Draw polyline segments onto face bounding box image
 
     :param face_img: cropped bounding box of face
-    :param polylines: polyline segments for
-    :param colors: blue, green, red color values
+    :param polylines: coordinates of polyline segments
+    :param colors: list blue, green, red color values, randomized if given > 1
     :param thickness: line thickness
     :return: face_img_lined: bounding box of face with all polylines
     """
 
-    face_img_lined = cv2.polylines(face_img, polylines, False, colors, thickness, cv2.LINE_AA)
+    face_img_lined = cv2.polylines(face_img, polylines, False, random.choice(colors), thickness, cv2.LINE_AA)
 
     return face_img_lined
 
 
-def define_polylines(landmarks, face_polyline_segment):
+def define_polylines(landmark_coors, face_polyline_segment):
     """
     Define the polyline segments used to draw the line segments of the full face polyline
 
-    :param landmarks: a full_object_detection object containing 68 face landmarks
+    :param landmark_coors: list of tuples of (x, y) coordinates for the 68 face landmarks
     :param face_polyline_segment: segment reference points for 68 face landmark model
     :return: polylines: list of line segments containing coordinates used to draw line segments of
     the full face polyline
     """
 
     polylines = []
-    coors = [(p.x, p.y) for p in landmarks.parts()]
     for segment in face_polyline_segment:
         segment_coors = []
         for point in segment:
-            segment_coors.append(coors[point])
+            segment_coors.append(landmark_coors[point])
         segment_coors = np.reshape(segment_coors, (-1, 2))
         polylines.append(segment_coors)
 
@@ -179,48 +180,37 @@ def load_img(img_file):
     return img
 
 
-def apply_mask(img, polyline, colors, line_thickness, detect_faces=True):
+def avg_landmarks(landmark_coors, landmarks_list):
     """
-    Return image array with polyline ai mask
+    Average current landmark coordinates with a list of landmark coordinates
 
-    :param img: image as a multidimensional numpy array
-    :param polyline: polyline type from face_polyline_segments
-    :param colors: blue, green, red color values
-    :param line_thickness: line thickness of polylines
-    :param detect_faces: boolean for whether to detect faces in image
-    :return: an image array with mask
+    :param landmark_coors: a numpy array of shape (68, 2) of average landmark points
+    :param landmarks_list: list of numpy arrays (of shape (68, 2) of landmark points
+    for averaging with current landmarks (a smoothing technique for video)
+    :return: landmark_avg: numpy array of shape (68, 2) of average landmark points
     """
 
-    mask = None
-    faces_rect = faces_detect(img)
-    if faces_rect:
-        for face_rect in faces_rect:
-            boundaries = rect_to_tuple(face_rect)
-            if detect_faces:
-                bound_edit = edit_boundaries(boundaries, img.shape)
-                face_img = img[bound_edit[1]:bound_edit[3], bound_edit[0]:bound_edit[2]]
-                face_rect_edit = faces_detect(face_img)
-                landmarks = get_landmarks(face_img, face_rect_edit[0])
-                polylines = define_polylines(landmarks, face_polyline_segments[polyline])
-                mask = draw_polylines(face_img, polylines, colors=colors, thickness=line_thickness)
-            else:
-                landmarks = get_landmarks(img, face_rect)
-                polylines = define_polylines(landmarks, face_polyline_segments[polyline])
-                mask = draw_polylines(img, polylines, colors=colors, thickness=line_thickness)
+    landmark_avg = np.add(landmark_coors, sum(landmarks_list)) // (len(landmarks_list) + 1)
 
-    return mask
+    return landmark_avg
 
 
 def main():
 
-    colors_bgr = ((255, 0, 255), (0, 255, 255), (255, 0, 0))
-
-    line_thickness = 3
-    dot_thickness = 15
-
     parser = argparse.ArgumentParser()
+    parser.add_argument('-m', '--mask_type', default='full', required=False,
+                        choices=['full', 'partial', 'dots'],
+                        help='type of mask to overlay on frames')
+    parser.add_argument('-c', '--colors_bgr', default='0,255,255', required=False,
+                        help='separate multiple colors with "-"')
+    parser.add_argument('-dth', '--dot_thickness', default=10, required=False)
+    parser.add_argument('-lth', '--line_thickness', default=3, required=False)
     parser.add_argument('-d', '--dir', required=True)
     args = parser.parse_args()
+
+    colors_bgr = [tuple(map(int, x.split(','))) for x in args.colors_bgr.split('-')]
+    line_thickness = args.line_thickness
+    dot_thickness = args.dot_thickness
 
     for filename in os.listdir(os.path.join(path, args.dir)):
         if filename.endswith(('jpg', 'JPG')):
@@ -229,25 +219,28 @@ def main():
             faces_rect = faces_detect(img)
             if faces_rect:
                 for idx, face_rect in enumerate(faces_rect):
-                    for colors in colors_bgr:
-                        for polyline_key in face_polyline_segments.keys():
-                            logging.info('lines: {}, colors: {}'.format(filename, polyline_key, colors))
-                            boundaries = rect_to_tuple(face_rect)
-                            bound_edit = edit_boundaries(boundaries, img.shape)
-                            face_img = img[bound_edit[1]:bound_edit[3], bound_edit[0]:bound_edit[2]]
+                    logging.info('lines: {}, colors: {}'.format(filename, args.mask_type, args.colors_bgr))
+                    boundaries = rect_to_tuple(face_rect)
+                    bound_edit = edit_boundaries(boundaries, img.shape)
+                    face_img = img[bound_edit[1]:bound_edit[3], bound_edit[0]:bound_edit[2]]
 
-                            face_rect_edit = faces_detect(face_img)  # rerunning to obtain consistent polyline thickness
-                            landmarks = get_landmarks(face_img, face_rect_edit[0])
-                            polylines = define_polylines(landmarks, face_polyline_segments[polyline_key])
+                    face_rect_edit = faces_detect(face_img)  # rerunning to obtain consistent polyline thickness
+                    landmarks = get_landmarks(face_img, face_rect_edit[0])
+                    landmark_coors = [(p.x, p.y) for p in landmarks.parts()]
+                    if args.mask_type == 'dots':
+                        img_dotted = draw_landmarks(copy.copy(face_img), landmark_coors, colors=colors_bgr,
+                                                    thickness=dot_thickness)
+                        cv2.imwrite(os.path.join(path, args.dir, 'faces',
+                                                 '_'.join([filename[:-4], 'm' + args.mask_type, 'c' + args.colors_bgr,
+                                                          'th' + str(args.line_thickness), str(idx)]) + '.jpg'), img_dotted)
+                    else:
+                        polylines = define_polylines(landmark_coors, face_polyline_segments[args.mask_type])
 
-                            img_lined = draw_polylines(copy.copy(face_img), polylines, colors=colors, thickness=line_thickness)
-                            cv2.imwrite(os.path.join(
-                                path, args.dir, 'faces', filename[:-4] + '_' + polyline_key + '_' + str(colors) + '_' + str(idx) + '.jpg'), img_lined)
-
-                            if polyline_key == 'full':
-                                img_dotted = draw_landmarks(copy.copy(face_img), landmarks, colors=colors, thickness=dot_thickness)
-                                cv2.imwrite(os.path.join(
-                                    path, args.dir, 'faces', filename[:-4] + '_' + polyline_key + '_' + 'dots' + '_' + str(colors) + '_' + str(idx) + '.jpg'), img_dotted)
+                        img_lined = draw_polylines(copy.copy(face_img), polylines, colors=colors_bgr,
+                                                   thickness=line_thickness)
+                        cv2.imwrite(os.path.join(path, args.dir, 'faces',
+                                                 '_'.join([filename[:-4], 'm' + args.mask_type, 'c' + args.colors_bgr,
+                                                          'th' + str(args.line_thickness), str(idx)]) + '.jpg'), img_lined)
 
 
 if __name__ == '__main__':
