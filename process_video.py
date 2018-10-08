@@ -14,6 +14,19 @@ path = os.path.join(os.path.dirname(os.path.realpath(__file__)))
 logging.basicConfig(stream=sys.stdout, level=logging.DEBUG)
 
 
+def get_chromakey_background(img, colors_bgr=[64, 177, 0]):
+    """
+    Return chroma key background for image overlaying
+    :param img: numpy array of image to create background from
+    :param colors_bgr: color for background
+    :return: background in specified chroma
+    """
+    color_array = np.array(colors_bgr, dtype=np.uint8)
+    chromakey_bg = np.tile(color_array, img.shape[0] * img.shape[1]).reshape(img.shape[0], img.shape[1], 3)
+
+    return chromakey_bg
+
+
 def show_frame(frame):
     """
     Display a frame of a video
@@ -55,7 +68,7 @@ def rotate_img(img, degrees):
 
 
 def process_video(vid_name, vid_cap, vid_write, mask_type='full', colors_bgr=(0, 255, 255),
-                  thickness=3, smooth_frames=15, recover=True):
+                  thickness=3, smooth_frames=15, recover=True, chromakey=False):
     """
     Process and save an OpenCV video capture object with an applied mask (one face per video)
 
@@ -65,8 +78,9 @@ def process_video(vid_name, vid_cap, vid_write, mask_type='full', colors_bgr=(0,
     :param mask_type: 'full', 'partial', or 'dots'
     :param colors_bgr: list of blue, green, red color values
     :param thickness: thickness of polyline values or dots
-    :param recover: boolean to attempt to apply previous frame's masks to frames that error in face detection
     :param smooth_frames: number of previous frames of landmarks to averge with current landmarks
+    :param recover: boolean to attempt to apply previous frame's masks to frames that error in face detection
+    :param chromakey: boolean to apply mask to a single color background
     """
 
     start = time.time()
@@ -90,6 +104,8 @@ def process_video(vid_name, vid_cap, vid_write, mask_type='full', colors_bgr=(0,
                     if len(landmarks_list) > smooth_frames:
                         _ = landmarks_list.pop(0)
                     landmark_coors = ai.avg_landmarks(landmark_coors, landmarks_list)
+                if chromakey is True:
+                    frame_v = get_chromakey_background(frame_v)
                 if mask_type == 'dots':
                     frame_mask = ai.draw_landmarks(frame_v, [tuple(c) for c in landmark_coors], colors_bgr, thickness)
                 else:
@@ -108,6 +124,8 @@ def process_video(vid_name, vid_cap, vid_write, mask_type='full', colors_bgr=(0,
                 logging.error('could not detect face in frame {} of {}'.format(counter, vid_name))
                 if recover:
                     logging.info('attempting to apply previous mask to current frame {} of {}'.format(counter, vid_name))
+                    if chromakey is True:
+                        frame_v = get_chromakey_background(frame_v)
                     if mask_type == 'dots':
                         frame_mask = ai.draw_landmarks(frame_v, [tuple(c) for c in landmark_coors], colors_bgr, thickness)
                     else:
@@ -145,6 +163,9 @@ def main():
                         help='thickness of mask lines or dots')
     parser.add_argument('-sf', '--smooth_frames', default=15, required=False,
                         help='a smoothing technique: the number of previous frames to average with current frame')
+    parser.add_argument('--chromakey', dest='chromakey', action='store_true')
+    parser.add_argument('--no_chromakey', dest='chromakey', action='store_false')
+    parser.set_defaults(chromakey=False)
     args = parser.parse_args()
 
     vid_cap = cv2.VideoCapture(args.infile)
@@ -153,6 +174,9 @@ def main():
         outfile = args.outfile[:-4]
     else:
         outfile = args.infile[:-4]
+
+    if args.chromakey:
+        outfile += '_chromakey'
 
     outfile = '_'.join([outfile, 'm' + args.mask_type, 'c' + args.colors_bgr,
                         'th' + str(args.thickness), 'sf' + str(args.smooth_frames) + '.mp4'])
@@ -165,7 +189,7 @@ def main():
 
     process_video(vid_name=args.infile, vid_cap=vid_cap, vid_write=vid_write, mask_type=args.mask_type,
                   colors_bgr=colors_bgr, thickness=int(args.thickness), smooth_frames=int(args.smooth_frames),
-                  recover=True)
+                  recover=True, chromakey=args.chromakey)
 
 
 if __name__ == '__main__':
